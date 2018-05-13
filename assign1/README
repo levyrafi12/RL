@@ -1,0 +1,59 @@
+Author: Rafi Levy raffilevy@gmail.com 057931354
+
+path in nova: ~levyrafi/courses/RL/assignment1
+
+OS and Python version:
+----------------------
+the code was developed and tested in windows7 and in python 3.6.4
+Testing in nova: 
+  In a strange way I was able to run mnist in python 2.7.6 only.
+  Running the agent problem failed. Seems that the failure happened when it
+  tried to display the CartPole video. I could not find a way to disable it
+  or somehow setting the DISPLAY to my laptop screen.
+
+Question 1: MNIST
+-----------------
+
+Files
+-----
+minst_1.py - implementation of section 1.
+mnist_2.py - implementation of section 2.
+mnist_3.py - implementation of section 3.
+mnist_stat.py - print statistics
+mnist_run.py - running all three different configurations
+
+Reports
+-------
+Sec. 1. Basic configuration
+  Accuracy 90%; 
+Sec. 2. Optimized configuration
+  Accuracy 91%. Faster convergence (within 10 epochs reaching minimum loss)
+Sec. 3. Hidden layer configuration
+  Accuracy 98%
+ 
+mnist_loss_curves.png - combining all three curves into a single figure
+
+Running command
+---------------
+Running each configuration separately -
+  % python mnist_<i>.py 
+Running all 3 configurations in a single execution and combining all 
+curves into a single figure.
+  % python mnist_run.py
+
+Question 2 OpenAi Gym
+---------------------
+
+agent_4.py - implementation of sections 2-4.
+agent_5.py - implementing section 5
+
+
+Reports
+-------
+Average number of episods to reach score 200 is 3.384
+histogram_episodes.png - histogram of number of episodes required until score 200 
+
+Running command
+---------------
+% python agent_<i>.py
+
