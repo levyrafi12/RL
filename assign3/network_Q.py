@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import copy
 
 # Load environment
 env = gym.make('FrozenLake-v0')
@@ -25,17 +26,20 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.fc1 = nn.Linear(input_size, num_classes)
 
-        def forward(self, x):
-            out = self.fc1(x)
-            return out
+    def forward(self, x):
+        out = self.fc1(x)
+        return out
  
+def one_hot_state_encoding(state):
+    oh_vec = torch.zeros(input_size)
+    oh_vec[state] = 1
+    return Variable(oh_vec)
+
 net = Net(input_size, num_classes)
 
 # Loss and Optimizer
 criterion = nn.MSELoss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9)
-
-Q = np.zeros([input_size,num_classes])
+optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
 
 # Implement Q-Network learning algorithm
 
@@ -55,40 +59,43 @@ for i in range(num_episodes):
     # The Q-Network
     while j < 99:
         j += 1
-        env.render()
-        oh_vec = torch.zeros(input_size) # one hot vec
-        oh_vec[s] = 1
-
+        # env.render()
         # 1. Choose an action greedily from the Q-network
         # (run the network for current state and choose the action with the maxQ)
-        Q1 = net(Variable(oh_vec))  
-        a = maxarg(Q_tag)
+        Q = net(one_hot_state_encoding(s))
+        _, a = torch.max(Q, 0)
         # 2. A chance of e to perform random action
         if np.random.rand(1) < e:
             a[0] = env.action_space.sample()
-
         # 3. Get new state(mark as s1) and reward(mark as r) from environment
-        s1, r, d, _ = env.step(a[0])
-        Qmax = Q
-        Qmax[a] = r + y * max(Q1)
-        Qmax = Q
-        for s in range(input_size):
-            Qmax[s,a] = r + y * max(Q_tag)
+        # print("a = %d" % (int(a[0])))
+        s1, r, d, _ = env.step(int(a[0]))
         # 4. Obtain the Q'(mark as Q1) values by feeding the new state through our network
-        # TODO: Implement Step 4
-
-        # 5. Obtain maxQ' and set our target value for chosen action using the bellman equation.
-        # TODO: Implement Step 5
-
-        # 6. Train the network using target and predicted Q values (model.zero(), forward, backward, optim.step)
-        # TODO: Implement Step 6
-
         rAll += r
-        s = s1
+        Q1 = net(one_hot_state_encoding(s1))
+        # 5. Obtain maxQ' and set our target value for chosen action using the bellman equation.
+        Q_target = copy.copy(Q.data)
+        Q_target[int(a[0])] = r + y * torch.max(Q1.data)
+        # 6. Train the network using target and predicted Q values (model.zero(), 
+        # forward, backward, optim.step)
+        Q = net(one_hot_state_encoding(s))
+        loss = criterion(Q, Variable(Q_target))
+        optimizer.zero_grad()   # zero the gradient buffers
+        loss.backward()
+        # print("loss = %f" % (loss.data[0]))
+        optimizer.step()
+
         if d == True:
             #Reduce chance of random action as we train the model.
             e = 1./((i/50) + 10)
+            """
+            if r > 0:
+                print("j = %d , reach Goal" % (j))
+            else:
+                 print("j = %d , reach hole" % (j))
+            """
             break
+
     jList.append(j)
     rList.append(rAll)
 
