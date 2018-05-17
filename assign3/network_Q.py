@@ -2,13 +2,40 @@ import gym
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
 
 # Load environment
 env = gym.make('FrozenLake-v0')
 
 # Define the neural network mapping 16x1 one hot vector to a vector of 4 Q values
 # and training loss
+
 # TODO: define network, loss and optimiser(use learning rate of 0.1).
+# Hyper Parameters
+input_size = env.observation_space.n
+num_classes = env.action_space.n
+batch_size = 1
+learning_rate = 0.1
+
+ # Neural Network Model
+class Net(nn.Module):
+    def __init__(self, input_size, num_classes):
+        super(Net, self).__init__()
+        self.fc1 = nn.Linear(input_size, num_classes)
+
+        def forward(self, x):
+            out = self.fc1(x)
+            return out
+ 
+net = Net(input_size, num_classes)
+
+# Loss and Optimizer
+criterion = nn.MSELoss()
+optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9)
+
+Q = np.zeros([input_size,num_classes])
 
 # Implement Q-Network learning algorithm
 
@@ -28,17 +55,25 @@ for i in range(num_episodes):
     # The Q-Network
     while j < 99:
         j += 1
-        # 1. Choose an action greedily from the Q-network
-        #    (run the network for current state and choose the action with the maxQ)
-        # TODO: Implement Step 1
+        env.render()
+        oh_vec = torch.zeros(input_size) # one hot vec
+        oh_vec[s] = 1
 
+        # 1. Choose an action greedily from the Q-network
+        # (run the network for current state and choose the action with the maxQ)
+        Q1 = net(Variable(oh_vec))  
+        a = maxarg(Q_tag)
         # 2. A chance of e to perform random action
         if np.random.rand(1) < e:
             a[0] = env.action_space.sample()
 
         # 3. Get new state(mark as s1) and reward(mark as r) from environment
         s1, r, d, _ = env.step(a[0])
-
+        Qmax = Q
+        Qmax[a] = r + y * max(Q1)
+        Qmax = Q
+        for s in range(input_size):
+            Qmax[s,a] = r + y * max(Q_tag)
         # 4. Obtain the Q'(mark as Q1) values by feeding the new state through our network
         # TODO: Implement Step 4
 
