@@ -9,7 +9,7 @@ from cart_pole import CartPole, Physics
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import lfilter
-
+import copy
 """
 Parts of the code (cart and pole dynamics, and the state
 discretization) are inspired from code available at the RL repository
@@ -99,7 +99,7 @@ NUM_STATES = 163
 NUM_ACTIONS = 2
 GAMMA = 0.995
 TOLERANCE = 0.01
-NO_LEARNING_THRESHOLD = 20
+NO_LEARNING_THRESHOLD =20
 
 # Time cycle of the simulation
 time = 0
@@ -138,66 +138,79 @@ state = cart_pole.get_state(state_tuple)
 
 ###### BEGIN YOUR CODE ######
 class MDP(object):
-	def __init__(self, nA, nS, R):
+	def __init__(self, nA, nS):
 		self.P = np.zeros((nA,nS,nS)) # state transition (state, reward, next_state)
-		self.P += 1.0 / nS # uniformly randomized 
 		self.nS = nS # number of states
 		self.nA = nA # number of actions
-		self.R = R.zeros(nS) # rewards are state's dependent only
+		self.R = np.zeros(nS) # rewards are state's dependent only
 
-	def update(self, trans_counts, state_action_counts, reward_counts, next_state_counts):
+	def init(self):
+		self.P = np.zeros((self.nA,self.nS,self.nS)) 
+		self.R = np.zeros(self.nS)
+
+	def update(self, trans_counts, state_action_counts, reward_counts, new_state_counts):
+		self.init()
+		for state in range(self.nS):
+			for action in range(self.nA):
+				key = (state, action)
+				if key not in state_action_counts:
+					self.P[action][state] = 1.0 / self.nS 
 		for key in trans_counts.keys():
-			state, action, next_state = key
+			state, action, new_state = key
 			prob = 1.0 * trans_counts[key] / state_action_counts[key[:2]]
-			P[action, next, state_next] = prob
+			self.P[action, state, new_state] = prob
 		for key in reward_counts:
 			count = reward_counts[key]
 			state, reward = key
-			R[state] += 1.0 * count * reward
-		for state in next_state_counts: 
-			R[state] /= next_state_counts[state]
+			self.R[state] += 1.0 * count * reward
+		for state in new_state_counts: 
+			self.R[state] /= new_state_counts[state]
 
-mdp = MDP(NUM_STATES, 2)
+mdp = MDP(2, NUM_STATES)
 
-def value_iteration(mdp, gamma, nIt, tol):
-	pi = []
+def value_iteration(mdp, Vprev, gamma, nIt, tol):
 	V = []
+	pi = []
 	for it in range(nIt):
-		oldpi = copy.copy(pi) if len(pi) > 0 else None
-		Vprev = V 
+		Vprev = copy.copy(V) if it > 0 else Vprev
+		oldpi = copy.copy(pi) if it > 0 else None
 		V = np.array(np.zeros(mdp.nS))
-		pi = np.array(np.zeros(mdp.nS))
+		pi = np.array(np.zeros(mdp.nS),dtype=int)
+		pi += -1
 		for s in range(mdp.nS):
 			best_a = None
-			max_val = 0
+			max_val = -np.inf
 			for a in range(mdp.nA):
+				val = 0
 				for next_s in range(mdp.nS):
 					prob = mdp.P[a][s][next_s]
-					val = prob * (R[next_s] + gamma * Vprev[next_s])
-					if val > max_val:
-						max_val = val
-						best_a = a
+					val += prob * (mdp.R[next_s] + gamma * Vprev[next_s])
+				if val > max_val:
+					max_val = val
+					best_a = a	
 			V[s] = max_val
 			pi[s] = best_a
 
-		if oldpi == None:
+		if oldpi is None:
 			continue
 
 		max_diff = np.abs(V - Vprev).max()
+		nChgActions="N/A" if oldpi is None else (pi != oldpi).sum()
+		# print ("iter=%d max_diff=%f n_changes=%s V[0]=%f"
+			# %(it, max_diff, nChgActions, V[0]))
+
 		if max_diff < tol:
 			break
 
-	return V, pi, nIt
+	return V, pi, it
 
-GAMMA = 0.95 # we'll be using this same value in subsequent problems
-
+trans_counts = {} # state, action, next_state 
+state_action_counts = {} # state, action
+reward_counts = {} # new_state, R
+new_state_counts = {} # new_state
 value_func = np.random.rand(NUM_STATES)
 value_func /= 10.0
-trans_counts = {}
-state_action_counts = {}
-rewards_counts = {}
-next_state_counts = {}
-
+pi = []
 ###### END YOUR CODE ######
 
 # This is the criterion to end the simulation.
@@ -219,7 +232,8 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 	###### BEGIN YOUR CODE ######
 	if consecutive_no_learning_trials <= 0:
 		action = 0 if np.random.uniform() < 0.5 else 1
-
+	else:
+		action = pi[state]
 	###### END YOUR CODE ######
 
 	# Get the next state by simulating the dynamics
@@ -232,7 +246,7 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 	# Get the state number corresponding to new state vector
 	new_state = cart_pole.get_state(state_tuple)
 	# if display_started == 1:
-	#     cart_pole.show_cart(state_tuple, pause_time)
+		# cart_pole.show_cart(state_tuple, pause_time)
 
 	# reward function to use - do not change this!
 	if new_state == NUM_STATES - 1:
@@ -249,38 +263,37 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 	# pole falls (the next if block)!
 
 	###### BEGIN YOUR CODE ###### 
+	# record the number of times `state, action, new_state` occurs
 	key = (state, action, new_state)
-	if trans_counts.has_key(key) == True:
+	if key in trans_counts:
 		trans_counts[key] += 1
 	else:
 		trans_counts[key] = 1
 
+	# record the number of times `state, action` occurs
 	key = (state, action)
-	if state_action_counts.has_key(key) == True:
-    	state_action_counts[key] += 1
-	else:
-		trans_counts[key] = 1
-
-	key = (next_state, R)
-	if reward_counts.has_key(key) == True:
+	if key in state_action_counts:
 		state_action_counts[key] += 1
+	else:
+		state_action_counts[key] = 1
+
+	# record the rewards for every `new_state`
+	key = (new_state, R)
+	if key in reward_counts:
+		reward_counts[key] += 1
 	else:
 		reward_counts[key] = 1
 
-	if nest_state_counts.has_key(next_state) == True:
-		next_state_counts[next_state] += 1
-	else:
-		next_state_counts[next_state] = 1
-
-	# record the number of times `state, action, new_state` occurs
-	# record the rewards for every `new_state`
 	# record the number of time `new_state` was reached
+	if new_state in new_state_counts:
+		new_state_counts[new_state] += 1
+	else:
+		new_state_counts[new_state] = 1
 	###### END YOUR CODE ######
 
 	# Recompute MDP model whenever pole falls
 	# Compute the value function V for the new model
 	if new_state == NUM_STATES - 1:
-
 		# Update MDP model using the current accumulated statistics about the
 		# MDP - transitions and rewards.
 		# Make sure you account for the case when a state-action pair has never
@@ -289,7 +302,7 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 		# initialized uniform distribution).
 
 		###### BEGIN YOUR CODE ######
-		mdp.update(trans_counts, state_action_counts, reward_counts, next_state_counts)	
+		mdp.update(trans_counts, state_action_counts, reward_counts, new_state_counts)
 		###### END YOUR CODE ######
 
 		# Perform value iteration using the new estimated model for the MDP.
@@ -299,12 +312,16 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 		# variable that checks when the whole simulation must end.
 
 		###### BEGIN YOUR CODE ######
-		value_func, policy, lastIt = value_iteration(mdp, gamma=GAMMA, nIt=20, tol=TOLERANCE)
-		# End simulation if value iteration converged after one iteration
+		value_func, pi, lastIt = value_iteration(mdp, value_func, 
+			gamma=GAMMA, nIt=20, tol=TOLERANCE)
+		print("lastIt %d" % (lastIt))
+		# print("pi=%s" % (str(pi)))
+		# Increase counter each time value iteration converged after one iteration
 		if lastIt <= 1: 
-			consecutive_no_learning_trials = NO_LEARNING_THRESHOLD
-		else:
 			consecutive_no_learning_trials += 1
+		else:
+			consecutive_no_learning_trials = 0
+			
 		###### END YOUR CODE ######
 
 	# Do NOT change this code: Controls the simulation, and handles the case
@@ -314,6 +331,7 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 		if num_failures >= max_failures:
 			break
 		print('[INFO] Failure number {}'.format(num_failures))
+		# print('nstep {}'.format(time - time_at_start_of_current_trial))
 		time_steps_to_failure.append(time - time_at_start_of_current_trial)
 		# time_steps_to_failure[num_failures] = time - time_at_start_of_current_trial
 		time_at_start_of_current_trial = time
