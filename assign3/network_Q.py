@@ -24,7 +24,8 @@ learning_rate = 0.1
 class Net(nn.Module):
     def __init__(self, input_size, num_classes):
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(input_size, num_classes)
+        self.fc1 = nn.Linear(input_size, num_classes, bias=0.0)
+        self.fc1.weight.data.fill_(1.0)
 
     def forward(self, x):
         out = self.fc1(x)
@@ -34,6 +35,10 @@ def one_hot_state_encoding(state):
     oh_vec = torch.zeros(input_size)
     oh_vec[state] = 1
     return Variable(oh_vec)
+
+def set_learning_rate(optim, lr):
+    for g in optim.param_groups: 
+        g['lr'] = lr
 
 net = Net(input_size, num_classes)
 
@@ -59,41 +64,36 @@ for i in range(num_episodes):
     # The Q-Network
     while j < 99:
         j += 1
-        # env.render()
-        # 1. Choose an action greedily from the Q-network
+        # Choose an action greedily from the Q-network
         # (run the network for current state and choose the action with the maxQ)
         Q = net(one_hot_state_encoding(s))
         _, a = torch.max(Q, 0)
-        # 2. A chance of e to perform random action
+        # A chance of e to perform random action
         if np.random.rand(1) < e:
             a[0] = env.action_space.sample()
-        # 3. Get new state(mark as s1) and reward(mark as r) from environment
-        # print("a = %d" % (int(a[0])))
+        # Get new state (mark as s1) and reward (mark as r) from environment
         s1, r, d, _ = env.step(int(a[0]))
-        # 4. Obtain the Q'(mark as Q1) values by feeding the new state through our network
         rAll += r
+        # obtain the Q' (mark as Q1) values by feeding the new state through our network
         Q1 = net(one_hot_state_encoding(s1))
-        # 5. Obtain maxQ' and set our target value for chosen action using the bellman equation.
         Q_target = copy.copy(Q.data)
-        Q_target[int(a[0])] = r + y * torch.max(Q1.data)
-        # 6. Train the network using target and predicted Q values (model.zero(), 
-        # forward, backward, optim.step)
+        # if we reach a hole, there is no point to take the estimated (predicted) value 
+        # from the network. In fact, the result should be 0
+        # maintain maxQ' and set our target value for chosen action using the bellman equation
+        Q1max = 0.0 if d and r == 0 else torch.max(Q1.data)
+        Q_target[int(a[0])] = r + y * Q1max
         Q = net(one_hot_state_encoding(s))
+        # Train the network using target and predicted Q values
         loss = criterion(Q, Variable(Q_target))
         optimizer.zero_grad()   # zero the gradient buffers
         loss.backward()
-        # print("loss = %f" % (loss.data[0]))
         optimizer.step()
-
-        if d == True:
+        s = s1
+        if d:
             #Reduce chance of random action as we train the model.
             e = 1./((i/50) + 10)
-            """
-            if r > 0:
-                print("j = %d , reach Goal" % (j))
-            else:
-                 print("j = %d , reach hole" % (j))
-            """
+            learning_rate = 1./((i/50) + 10)
+            set_learning_rate(optimizer, learning_rate)
             break
 
     jList.append(j)

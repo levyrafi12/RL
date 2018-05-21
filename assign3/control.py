@@ -196,9 +196,7 @@ def value_iteration(mdp, Vprev, gamma, nIt, tol):
 
 		max_diff = np.abs(V - Vprev).max()
 		nChgActions="N/A" if oldpi is None else (pi != oldpi).sum()
-		# print ("iter=%d max_diff=%f n_changes=%s V[0]=%f"
-			# %(it, max_diff, nChgActions, V[0]))
-
+		
 		if max_diff < tol:
 			break
 
@@ -314,9 +312,6 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 		###### BEGIN YOUR CODE ######
 		value_func, pi, lastIt = value_iteration(mdp, value_func, 
 			gamma=GAMMA, nIt=20, tol=TOLERANCE)
-		print("lastIt %d" % (lastIt))
-		# print("pi=%s" % (str(pi)))
-		# Increase counter each time value iteration converged after one iteration
 		if lastIt <= 1: 
 			consecutive_no_learning_trials += 1
 		else:
@@ -331,7 +326,6 @@ while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
 		if num_failures >= max_failures:
 			break
 		print('[INFO] Failure number {}'.format(num_failures))
-		# print('nstep {}'.format(time - time_at_start_of_current_trial))
 		time_steps_to_failure.append(time - time_at_start_of_current_trial)
 		# time_steps_to_failure[num_failures] = time - time_at_start_of_current_trial
 		time_at_start_of_current_trial = time
