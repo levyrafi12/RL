@@ -26,7 +26,7 @@ class DQN(nn.Module):
         return self.fc5(x)
 
 class DQN_RAM(nn.Module):
-    def __init__(self, in_features=4, num_actions=18):
+    def __init__(self, in_features=128, num_actions=6):
         """
         Initialize a deep Q-learning network for testing algorithm
             in_features: number of features of input.

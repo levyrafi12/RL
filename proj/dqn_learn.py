@@ -18,7 +18,10 @@ from utils.replay_buffer import ReplayBuffer
 from utils.gym import get_wrapper_by_name
 
 USE_CUDA = torch.cuda.is_available()
+# USE_CUDA = False
+
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+# dtype = torch.FloatTensor
 
 class Variable(autograd.Variable):
     def __init__(self, data, *args, **kwargs):
@@ -104,6 +107,7 @@ def dqn_learing(
     if len(env.observation_space.shape) == 1:
         # This means we are running on low-dimensional observations (e.g. RAM)
         input_arg = env.observation_space.shape[0]
+        print("input_arg {}".format(input_arg))
     else:
         img_h, img_w, img_c = env.observation_space.shape
         input_arg = frame_history_len * img_c
@@ -113,15 +117,17 @@ def dqn_learing(
     def select_epilson_greedy_action(model, obs, t):
         sample = random.random()
         eps_threshold = exploration.value(t)
-        if sample > eps_threshold:
+        if True or sample > eps_threshold:
             obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
-            # Use volatile = True if variable is only used in inference mode, i.e. don’t save the history
-            return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+            with torch.no_grad():
+                out = model(obs)
+            return out.max(1)[1] # .cpu()
         else:
             return torch.IntTensor([[random.randrange(num_actions)]])
 
     # Initialize target q function and q function, i.e. build the model.
     ######
+    Q = q_func().cuda() if torch.cuda.is_available() else q_func()
 
     # YOUR CODE HERE
 
@@ -143,11 +149,12 @@ def dqn_learing(
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
 
+    print("batch size {}".format(batch_size))
     for t in count():
         ### 1. Check stopping criterion
         if stopping_criterion is not None and stopping_criterion(env):
             break
-
+        print(t)
         ### 2. Step the env and store the transition
         # At this point, "last_obs" contains the latest observation that was
         # recorded from the simulator. Here, your code needs to store this
@@ -178,9 +185,19 @@ def dqn_learing(
         # may not yet have been initialized (but of course, the first step
         # might as well be random, since you haven't trained your net...)
         #####
-
         # YOUR CODE HERE
 
+        for i in range(10000): 
+            frame_idx = replay_buffer.store_frame(last_obs)
+            encoded_obs = replay_buffer.encode_recent_observation()
+            action = select_epilson_greedy_action(Q, encoded_obs, t)
+            next_obs, reward, done, _ = env.step(action)
+            replay_buffer.store_effect(frame_idx, action, reward, done)
+            if done:
+                last_obs = env.reset()
+                print("i {} reward = {}".format(i, reward))
+                break
+            last_obs = next_obs
         #####
 
         # at this point, the environment should have been advanced one step (and
@@ -191,19 +208,26 @@ def dqn_learing(
         # Note that this is only done if the replay buffer contains enough samples
         # for us to learn something useful -- until then, the model will not be
         # initialized and random actions should be taken
-        if (t > learning_starts and
-                t % learning_freq == 0 and
-                replay_buffer.can_sample(batch_size)):
+        if (t > learning_starts and 
+            t % learning_freq == 0 and 
+            replay_buffer.can_sample(batch_size)):
+            print("bye")
             # Here, you should perform training. Training consists of four steps:
             # 3.a: use the replay buffer to sample a batch of transitions (see the
             # replay buffer code for function definition, each batch that you sample
             # should consist of current observations, current actions, rewards,
             # next observations, and done indicator).
+            obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = replay_buffer.sample(batch_size)
+            print(obs_batch.shape)
+            print(act_batch)
+            print(rew_batch)
+            action = select_epilson_greedy_action(Q, obs_batch, t)
             # Note: Move the variables to the GPU if avialable
             # 3.b: fill in your own code to compute the Bellman error. This requires
             # evaluating the current and next Q-values and constructing the corresponding error.
             # Note: don't forget to clip the error between [-1,1], multiply is by -1 (since pytorch minimizes) and
             #       maskout post terminal status Q-values (see ReplayBuffer code).
+
             # 3.c: train the model. To do this, use the bellman error you calculated perviously.
             # Pytorch will differentiate this error for you, to backward the error use the following API:
             #       current.backward(d_error.data.unsqueeze(1))
