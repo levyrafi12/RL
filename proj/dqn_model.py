@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class DQN(nn.Module):
-    def __init__(self, in_channels=4, num_actions=18):
+    def __init__(self, in_channels=4, num_actions=6):
         """
         Initialize a deep Q-learning network as described in
         https://storage.googleapis.com/deepmind-data/assets/papers/DeepMindNature14236Paper.pdf
@@ -19,6 +19,7 @@ class DQN(nn.Module):
         self.fc5 = nn.Linear(512, num_actions)
 
     def forward(self, x):
+        # print("forward {}".format(x.shape))
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
