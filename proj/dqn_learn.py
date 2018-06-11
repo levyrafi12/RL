@@ -14,6 +14,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
 
+import copy
+import sys
+
 from utils.replay_buffer import ReplayBuffer
 from utils.gym import get_wrapper_by_name
 
@@ -21,6 +24,7 @@ USE_CUDA = torch.cuda.is_available()
 # USE_CUDA = False
 
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+device = 'cuda:0' if torch.cuda.is_available() else cpu
 # dtype = torch.FloatTensor
 
 class Variable(autograd.Variable):
@@ -107,35 +111,41 @@ def dqn_learing(
     if len(env.observation_space.shape) == 1:
         # This means we are running on low-dimensional observations (e.g. RAM)
         input_arg = env.observation_space.shape[0]
+        print("# actions {}".format(env.action_space))
         print("input_arg {}".format(input_arg))
     else:
         img_h, img_w, img_c = env.observation_space.shape
         input_arg = frame_history_len * img_c
+        print("# actions {}".format(env.action_space))
+        print("input_arg {}".format(input_arg))
     num_actions = env.action_space.n
 
     # Construct an epilson greedy policy with given exploration schedule
     def select_epilson_greedy_action(model, obs, t):
         sample = random.random()
         eps_threshold = exploration.value(t)
-        if True or sample > eps_threshold:
+        if sample > eps_threshold:
             obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
+            # print("obs {}".format(obs.shape))
             with torch.no_grad():
                 out = model(obs)
-            return out.max(1)[1] # .cpu()
+            return out.max(1)[1] 
         else:
             return torch.IntTensor([[random.randrange(num_actions)]])
 
+    def evaluate_model(model, obs):
+        if len(env.observation_space.shape) > 1:
+            obs = torch.from_numpy(obs).type(dtype) / 255.0
+        else:
+            obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
+        return model(obs)
+
     # Initialize target q function and q function, i.e. build the model.
-    ######
-    Q = q_func().cuda() if torch.cuda.is_available() else q_func()
-
-    # YOUR CODE HERE
-
-    ######
-
+    Q_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func()
+    Q_target_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func()
 
     # Construct Q network optimizer function
-    optimizer = optimizer_spec.constructor(Q.parameters(), **optimizer_spec.kwargs)
+    optimizer = optimizer_spec.constructor(Q_net.parameters(), **optimizer_spec.kwargs)
 
     # Construct the replay buffer
     replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len)
@@ -148,102 +158,72 @@ def dqn_learing(
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
+    # LOG_EVERY_N_STEPS = 10
+    # learning_starts = 1
 
-    print("batch size {}".format(batch_size))
+    stopping_criterion = None
+
     for t in count():
         ### 1. Check stopping criterion
         if stopping_criterion is not None and stopping_criterion(env):
             break
-        print(t)
-        ### 2. Step the env and store the transition
-        # At this point, "last_obs" contains the latest observation that was
-        # recorded from the simulator. Here, your code needs to store this
-        # observation and its outcome (reward, next observation, etc.) into
-        # the replay buffer while stepping the simulator forward one step.
-        # At the end of this block of code, the simulator should have been
-        # advanced one step, and the replay buffer should contain one more
-        # transition.
-        # Specifically, last_obs must point to the new latest observation.
-        # Useful functions you'll need to call:
-        # obs, reward, done, info = env.step(action)
-        # this steps the environment forward one step
-        # obs = env.reset()
-        # this resets the environment if you reached an episode boundary.
-        # Don't forget to call env.reset() to get a new observation if done
-        # is true!!
-        # Note that you cannot use "last_obs" directly as input
-        # into your network, since it needs to be processed to include context
-        # from previous frames. You should check out the replay buffer
-        # implementation in dqn_utils.py to see what functionality the replay
-        # buffer exposes. The replay buffer has a function called
-        # encode_recent_observation that will take the latest observation
-        # that you pushed into the buffer and compute the corresponding
-        # input that should be given to a Q network by appending some
-        # previous frames.
-        # Don't forget to include epsilon greedy exploration!
-        # And remember that the first time you enter this loop, the model
-        # may not yet have been initialized (but of course, the first step
-        # might as well be random, since you haven't trained your net...)
-        #####
-        # YOUR CODE HERE
+        if t % 1000 == 0:
+            print("episode {}".format(t))
 
         for i in range(10000): 
             frame_idx = replay_buffer.store_frame(last_obs)
             encoded_obs = replay_buffer.encode_recent_observation()
-            action = select_epilson_greedy_action(Q, encoded_obs, t)
+            action = select_epilson_greedy_action(Q_net, encoded_obs, t)
             next_obs, reward, done, _ = env.step(action)
             replay_buffer.store_effect(frame_idx, action, reward, done)
+            # env.render()
+            # print("last_obs shape {}".format(last_obs.shape))
             if done:
                 last_obs = env.reset()
-                print("i {} reward = {}".format(i, reward))
+                # print("episode completed after {} iterations , reward = {}".format(i, reward))
                 break
             last_obs = next_obs
-        #####
 
-        # at this point, the environment should have been advanced one step (and
-        # reset if done was true), and last_obs should point to the new latest
-        # observation
-
-        ### 3. Perform experience replay and train the network.
-        # Note that this is only done if the replay buffer contains enough samples
-        # for us to learn something useful -- until then, the model will not be
-        # initialized and random actions should be taken
         if (t > learning_starts and 
             t % learning_freq == 0 and 
             replay_buffer.can_sample(batch_size)):
-            print("bye")
-            # Here, you should perform training. Training consists of four steps:
-            # 3.a: use the replay buffer to sample a batch of transitions (see the
-            # replay buffer code for function definition, each batch that you sample
-            # should consist of current observations, current actions, rewards,
-            # next observations, and done indicator).
-            obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = replay_buffer.sample(batch_size)
-            print(obs_batch.shape)
-            print(act_batch)
-            print(rew_batch)
-            action = select_epilson_greedy_action(Q, obs_batch, t)
-            # Note: Move the variables to the GPU if avialable
-            # 3.b: fill in your own code to compute the Bellman error. This requires
-            # evaluating the current and next Q-values and constructing the corresponding error.
-            # Note: don't forget to clip the error between [-1,1], multiply is by -1 (since pytorch minimizes) and
-            #       maskout post terminal status Q-values (see ReplayBuffer code).
+            # print("learning..")
+            obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = \
+                replay_buffer.sample(batch_size)
 
-            # 3.c: train the model. To do this, use the bellman error you calculated perviously.
-            # Pytorch will differentiate this error for you, to backward the error use the following API:
-            #       current.backward(d_error.data.unsqueeze(1))
-            # Where "current" is the variable holding current Q Values and d_error is the clipped bellman error.
-            # Your code should produce one scalar-valued tensor.
-            # Note: don't forget to call optimizer.zero_grad() before the backward call and
-            #       optimizer.step() after the backward call.
-            # 3.d: periodically update the target network by loading the current Q network weights into the
-            #      target_Q network. see state_dict() and load_state_dict() methods.
-            #      you should update every target_update_freq steps, and you may find the
-            #      variable num_param_updates useful for this (it was initialized to 0)
-            #####
+            act_batch= torch.cat([torch.tensor([[a]], dtype=torch.long, \
+                device=device) for a in act_batch])
+            Q_val = evaluate_model(Q_net, obs_batch)
+            # construct estimated Q - select Q[state(i), action(i)] for each i in batch
+            Q_val = Q_val.squeeze(0).gather(1, act_batch).squeeze(1) 
+            # print("Q_val {}".format(Q_val))
+            # construct expected Q
+            Q_next_max = evaluate_model(Q_target_net, next_obs_batch)
+            # print("Q_next_max {}".format(Q_next_max))
+            Q_next_max = Q_next_max.squeeze(0).max(1)[0]
+            # print("Q_next_max.max(1)[0] {}".format(Q_next_max))
+            y = torch.from_numpy(rew_batch).type(dtype) # expected Q
+            # print("y {}".format(y))
+            d_error = torch.tensor(torch.zeros(batch_size, device=device)) # Bellman delta error
+            # print("d_error {}".format(d_error))
+            for i in range(batch_size):
+                y[i] += 0.0 if done_batch[i] else gamma * Q_next_max[i]
+                # print("y[i] {} {}".format(i, y[i]))
+                d_error[i] = -1 * (y[i] - Q_val[i]).clamp(-1, 1) 
+            # print("d_error {}".format(d_error))
+            # print("d_error.data.unsqueeze(1) {}".format(d_error.data.unsqueeze(1)))
 
-            # YOUR CODE HERE
+            optimizer.zero_grad()
+            current = Q_val.unsqueeze(1)
+            # print("current {}".format(current))
 
-            #####
+            current.backward(d_error.data.unsqueeze(1))
+
+            optimizer.step()
+
+            if num_param_updates % target_update_freq == 0:
+                Q_target_net.load_state_dict(Q_net.state_dict())  
+                num_param_updates += 1
 
         ### 4. Log progress and keep track of statistics
         episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
