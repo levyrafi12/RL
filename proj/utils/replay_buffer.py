@@ -167,7 +167,6 @@ class ReplayBuffer(object):
             self.action   = np.empty([self.size],                     dtype=np.int32)
             self.reward   = np.empty([self.size],                     dtype=np.float32)
             self.done     = np.empty([self.size],                     dtype=np.bool)
-
         self.obs[self.next_idx] = frame
 
         ret = self.next_idx

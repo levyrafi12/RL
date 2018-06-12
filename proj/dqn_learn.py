@@ -24,7 +24,7 @@ USE_CUDA = torch.cuda.is_available()
 # USE_CUDA = False
 
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
-device = 'cuda:0' if torch.cuda.is_available() else cpu
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 # dtype = torch.FloatTensor
 
 class Variable(autograd.Variable):
@@ -126,7 +126,6 @@ def dqn_learing(
         eps_threshold = exploration.value(t)
         if sample > eps_threshold:
             obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
-            # print("obs {}".format(obs.shape))
             with torch.no_grad():
                 out = model(obs)
             return out.max(1)[1] 
@@ -141,8 +140,8 @@ def dqn_learing(
         return model(obs)
 
     # Initialize target q function and q function, i.e. build the model.
-    Q_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func()
-    Q_target_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func()
+    Q_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func(input_arg , num_actions)
+    Q_target_net = q_func(input_arg , num_actions).cuda() if torch.cuda.is_available() else q_func(input_arg , num_actions)
 
     # Construct Q network optimizer function
     optimizer = optimizer_spec.constructor(Q_net.parameters(), **optimizer_spec.kwargs)
@@ -167,21 +166,21 @@ def dqn_learing(
         ### 1. Check stopping criterion
         if stopping_criterion is not None and stopping_criterion(env):
             break
+       
         if t % 1000 == 0:
-            print("episode {}".format(t))
+            print("t {}".format(t))
 
-        for i in range(10000): 
-            frame_idx = replay_buffer.store_frame(last_obs)
-            encoded_obs = replay_buffer.encode_recent_observation()
-            action = select_epilson_greedy_action(Q_net, encoded_obs, t)
-            next_obs, reward, done, _ = env.step(action)
-            replay_buffer.store_effect(frame_idx, action, reward, done)
-            # env.render()
-            # print("last_obs shape {}".format(last_obs.shape))
-            if done:
-                last_obs = env.reset()
-                # print("episode completed after {} iterations , reward = {}".format(i, reward))
-                break
+        frame_idx = replay_buffer.store_frame(last_obs)
+        encoded_obs = replay_buffer.encode_recent_observation()
+        action = select_epilson_greedy_action(Q_net, encoded_obs, t)
+        next_obs, reward, done, _ = env.step(action)
+        replay_buffer.store_effect(frame_idx, action, reward, done)
+        # env.render()
+        # print("last_obs shape {}".format(last_obs.shape))
+        if done:
+            last_obs = env.reset()
+            # print("episode completed after {} iterations , reward = {}".format(i, reward))
+        else:
             last_obs = next_obs
 
         if (t > learning_starts and 
