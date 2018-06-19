@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class DQN(nn.Module):
-    def __init__(self, in_channels=4, num_actions=6):
+    def __init__(self, in_channels=4, num_actions=18):
         """
         Initialize a deep Q-learning network as described in
         https://storage.googleapis.com/deepmind-data/assets/papers/DeepMindNature14236Paper.pdf
@@ -27,7 +27,7 @@ class DQN(nn.Module):
         return self.fc5(x)
 
 class DQN_RAM(nn.Module):
-    def __init__(self, in_features=128, num_actions=6):
+    def __init__(self, in_features=128, num_actions=18):
         """
         Initialize a deep Q-learning network for testing algorithm
             in_features: number of features of input.

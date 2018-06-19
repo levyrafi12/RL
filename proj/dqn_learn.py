@@ -158,7 +158,7 @@ def dqn_learing(
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
     # LOG_EVERY_N_STEPS = 10
-    # learning_starts = 1
+    learning_starts = 1000
 
     stopping_criterion = None
 
@@ -193,6 +193,8 @@ def dqn_learing(
             act_batch= torch.cat([torch.tensor([[a]], dtype=torch.long, \
                 device=device) for a in act_batch])
             Q_val = evaluate_model(Q_net, obs_batch)
+            print("Q_val shape {}".format(Q_val.shape))
+            print("act_batch shape {}".format(act_batch.shape))
             # construct estimated Q - select Q[state(i), action(i)] for each i in batch
             Q_val = Q_val.squeeze(0).gather(1, act_batch).squeeze(1) 
             # print("Q_val {}".format(Q_val))
@@ -208,19 +210,23 @@ def dqn_learing(
             for i in range(batch_size):
                 y[i] += 0.0 if done_batch[i] else gamma * Q_next_max[i]
                 # print("y[i] {} {}".format(i, y[i]))
-                d_error[i] = -1 * (y[i] - Q_val[i]).clamp(-1, 1) 
-            # print("d_error {}".format(d_error))
+                d_error[i] = -1 * (y[i] - Q_val[i]).clamp(-1, 1)
+            if t % 100 == 0: 
+                print("d_error {}".format(d_error))
             # print("d_error.data.unsqueeze(1) {}".format(d_error.data.unsqueeze(1)))
 
             optimizer.zero_grad()
             current = Q_val.unsqueeze(1)
             # print("current {}".format(current))
 
+            print("current requires_grad {}".format(current.requires_grad))
+            print("d_error requires_grad {}".format(d_error.requires_grad))
+
             current.backward(d_error.data.unsqueeze(1))
 
             optimizer.step()
 
-            if num_param_updates % target_update_freq == 0:
+            if t % target_update_freq == 0:
                 Q_target_net.load_state_dict(Q_net.state_dict())  
                 num_param_updates += 1
 
