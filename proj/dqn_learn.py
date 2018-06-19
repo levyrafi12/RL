@@ -24,6 +24,7 @@ USE_CUDA = torch.cuda.is_available()
 # USE_CUDA = False
 
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+dtypeLong = torch.cuda.LongTensor if torch.cuda.is_available() else torch.LongTensor
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 # dtype = torch.FloatTensor
 
@@ -133,10 +134,7 @@ def dqn_learing(
             return torch.IntTensor([[random.randrange(num_actions)]])
 
     def evaluate_model(model, obs):
-        if len(env.observation_space.shape) > 1:
-            obs = torch.from_numpy(obs).type(dtype) / 255.0
-        else:
-            obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
+        obs = torch.from_numpy(obs).type(dtype) / 255.0
         return model(obs)
 
     # Initialize target q function and q function, i.e. build the model.
@@ -158,7 +156,7 @@ def dqn_learing(
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
     # LOG_EVERY_N_STEPS = 10
-    learning_starts = 1000
+    # learning_starts = 1000
 
     stopping_criterion = None
 
@@ -177,6 +175,7 @@ def dqn_learing(
         replay_buffer.store_effect(frame_idx, action, reward, done)
         # env.render()
         # print("last_obs shape {}".format(last_obs.shape))
+        # print("reward {} done {}".format(reward, done))
         if done:
             last_obs = env.reset()
             # print("episode completed after {} iterations , reward = {}".format(i, reward))
@@ -190,45 +189,45 @@ def dqn_learing(
             obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = \
                 replay_buffer.sample(batch_size)
 
-            act_batch= torch.cat([torch.tensor([[a]], dtype=torch.long, \
-                device=device) for a in act_batch])
-            Q_val = evaluate_model(Q_net, obs_batch)
-            print("Q_val shape {}".format(Q_val.shape))
-            print("act_batch shape {}".format(act_batch.shape))
+            Q_cur_val = evaluate_model(Q_net, obs_batch)
+            # print("Q_val {}".format(Q_val.shape))
+            act_batch = torch.tensor(torch.from_numpy(act_batch).type(dtypeLong), device=device).unsqueeze(1)
+            # print("act batch {}".format(act_batch.shape))
             # construct estimated Q - select Q[state(i), action(i)] for each i in batch
-            Q_val = Q_val.squeeze(0).gather(1, act_batch).squeeze(1) 
-            # print("Q_val {}".format(Q_val))
+            Q_cur_val = Q_cur_val.gather(1, act_batch).squeeze(1) 
+            # print("Q_val {}".format(Q_val.shape))
             # construct expected Q
-            Q_next_max = evaluate_model(Q_target_net, next_obs_batch)
-            # print("Q_next_max {}".format(Q_next_max))
-            Q_next_max = Q_next_max.squeeze(0).max(1)[0]
+            Q_next_val = evaluate_model(Q_target_net, next_obs_batch)
+            # print("Q_next_max shape {}".format(Q_next_max.shape))
+            Q_next_max = Q_next_val.max(1)[0]
             # print("Q_next_max.max(1)[0] {}".format(Q_next_max))
             y = torch.from_numpy(rew_batch).type(dtype) # expected Q
             # print("y {}".format(y))
+            # print("y {}".format(y))
             d_error = torch.tensor(torch.zeros(batch_size, device=device)) # Bellman delta error
             # print("d_error {}".format(d_error))
-            for i in range(batch_size):
-                y[i] += 0.0 if done_batch[i] else gamma * Q_next_max[i]
-                # print("y[i] {} {}".format(i, y[i]))
-                d_error[i] = -1 * (y[i] - Q_val[i]).clamp(-1, 1)
-            if t % 100 == 0: 
-                print("d_error {}".format(d_error))
-            # print("d_error.data.unsqueeze(1) {}".format(d_error.data.unsqueeze(1)))
+            # print("done_mask {}".format(done_batch))
+            done_batch = torch.tensor(torch.from_numpy(done_batch).type(dtype), device=device)
+            y += (1 - done_batch) * gamma * Q_next_max
+            d_error = -1 * (y - Q_cur_val).clamp(-1, 1)
+            # if t % 1000 == 0: 
+            # print("loss {}".format(sum(d_error) / batch_size))
 
             optimizer.zero_grad()
-            current = Q_val.unsqueeze(1)
+            # current = Q_val.unsqueeze(1)
             # print("current {}".format(current))
 
-            print("current requires_grad {}".format(current.requires_grad))
-            print("d_error requires_grad {}".format(d_error.requires_grad))
+            # print("current requires_grad {}".format(current.requires_grad))
+            # print("d_error requires_grad {}".format(d_error.requires_grad))
 
-            current.backward(d_error.data.unsqueeze(1))
+            Q_cur_val.backward(d_error) # .data.unsqueeze(1))
 
             optimizer.step()
 
-            if t % target_update_freq == 0:
+            num_param_updates += 1
+
+            if num_param_updates % target_update_freq == 0:
                 Q_target_net.load_state_dict(Q_net.state_dict())  
-                num_param_updates += 1
 
         ### 4. Log progress and keep track of statistics
         episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
