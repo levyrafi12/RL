@@ -205,14 +205,14 @@ def dqn_learing(
 
         if (t > learning_starts and 
             t % learning_freq == 0 and 
+            replay_buffer.can_sample(batch_size)):
 
             # Here, you should perform training. Training consists of four steps:
             # 3.a: use the replay buffer to sample a batch of transitions (see the
             # replay buffer code for function definition, each batch that you sample
             # should consist of current observations, current actions, rewards,
             # next observations, and done indicator).
-
-            replay_buffer.can_sample(batch_size)):
+                
             obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = \
                 replay_buffer.sample(batch_size)
 
