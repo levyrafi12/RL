@@ -40,7 +40,7 @@ def set_learning_rate(optim, lr):
     for g in optim.param_groups: 
         g['lr'] = lr
 
-net = Net(input_size, num_classes)
+
 
 # Loss and Optimizer
 criterion = nn.MSELoss()
